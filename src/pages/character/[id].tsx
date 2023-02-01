@@ -8,6 +8,8 @@ import { Button, Card, Container, Grid, Text } from '@nextui-org/react';
 import { useAppDispatch, useAppSelector } from '@/store';
 import { addFavorite, delFavorite } from '@/store/slices/favorites';
 import confetti from 'canvas-confetti';
+import { getMarvelCharacter, marvelList } from '@/utils';
+import { BLOCKED_PAGES } from 'next/dist/shared/lib/constants';
 
 interface Props {
   character: Character;
@@ -21,7 +23,7 @@ const CharacterPage: NextPage<Props> = ({ character }) => {
   useEffect(() => {
     const chartItem = favorites.find(({ id }) => id === character.id);
     setIsFavorite(chartItem !== undefined);
-  }, [character]);
+  }, []);
 
   const handleClickFavorite = () => {
     setIsFavorite((fav) => !fav);
@@ -97,53 +99,35 @@ const CharacterPage: NextPage<Props> = ({ character }) => {
 };
 
 export const getStaticPaths: GetStaticPaths = async (ctx) => {
-  const limit = 100;
-  const offset = 1;
-  const { data } = await marvelApi.get<MarvelListResponse>(`/characters?limit=${limit}&offset=${offset}`);
-  const marvel1001 = data.data.results.map((characterItem) => ({
-    id: `${characterItem.id}`,
-  }));
   return {
-    paths: marvel1001.map(({ id }) => ({
+    paths: (await marvelList(90, 0)).map((id) => ({
       params: {
         id,
       },
     })),
-    fallback: false,
+    fallback: 'blocking',
   };
 };
 
 export const getStaticProps: GetStaticProps = async ({ params }) => {
   const { id } = params as { id: string };
-  const { data } = await marvelApi.get<MarvelListResponse>(`/characters?id=${id}`);
-  const chactNoImage = data.data.results[0];
-  const { data: comicListResult } = await marvelApi.get<ComicListResult>(`/characters/${id}/comics`);
-  const character: Character = {
-    id: chactNoImage.id,
-    description: chactNoImage.description,
-    name: chactNoImage.name,
-    modified: chactNoImage.modified,
-    image: `${chactNoImage.thumbnail.path}.${chactNoImage.thumbnail.extension}`,
-    comicResult: comicListResult.data.results.map(
-      ({ id, description, isbn, issueNumber, modified, pageCount, title, resourceURI, thumbnail }) => ({
-        id,
-        description,
-        isbn,
-        issueNumber,
-        modified,
-        pageCount,
-        image: `${thumbnail.path}.${thumbnail.extension}`,
-        thumbnail,
-        title,
-        resourceURI,
-      })
-    ),
-  };
+
+  const character = await getMarvelCharacter(id);
+
+  if (!character) {
+    return {
+      redirect: {
+        destination: '/',
+        permanent: false,
+      },
+    };
+  }
 
   return {
     props: {
       character,
     },
+    revalidate: 86400,
   };
 };
 
